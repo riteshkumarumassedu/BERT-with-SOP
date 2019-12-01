@@ -6,10 +6,11 @@
 from random import randint, shuffle
 from random import random as rand
 import fire
+import random
 
 import torch
 import torch.nn as nn
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
 
 import tokenization
 import models
@@ -276,7 +277,7 @@ def main(train_cfg='config/pretrain.json',
     optimizer = optim.optim4GPU(cfg, model)
     trainer = train.Trainer(cfg, model, data_iter, optimizer, save_dir, get_device())
 
-    writer = SummaryWriter(log_dir=log_dir) # for tensorboardX
+    # writer = SummaryWriter(log_dir=log_dir) # for tensorboardX
 
     def get_loss(model, batch, global_step): # make sure loss is tensor
         input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next = batch
@@ -285,13 +286,13 @@ def main(train_cfg='config/pretrain.json',
         loss_lm = criterion1(logits_lm.transpose(1, 2), masked_ids) # for masked LM
         loss_lm = (loss_lm*masked_weights.float()).mean()
         loss_clsf = criterion2(logits_clsf, is_next) # for sentence classification
-        writer.add_scalars('data/scalar_group',
-                           {'loss_lm': loss_lm.item(),
-                            'loss_clsf': loss_clsf.item(),
-                            'loss_total': (loss_lm + loss_clsf).item(),
-                            'lr': optimizer.get_lr()[0],
-                           },
-                           global_step)
+        # writer.add_scalars('data/scalar_group',
+        #                    {'loss_lm': loss_lm.item(),
+        #                     'loss_clsf': loss_clsf.item(),
+        #                     'loss_total': (loss_lm + loss_clsf).item(),
+        #                     'lr': optimizer.get_lr()[0],
+        #                    },
+        #                    global_step)
         return loss_lm + loss_clsf
 
     trainer.train(get_loss, model_file, None, data_parallel)
