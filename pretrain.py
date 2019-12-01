@@ -3,7 +3,7 @@
     ALBERT Implementation with forking
     Clean Pytorch Code from https://github.com/dhlee347/pytorchic-bert
 """
-
+import random
 from random import randint, shuffle
 from random import random as rand
 
@@ -40,7 +40,7 @@ class SentPairDataLoader():
     def __init__(self, file, batch_size, tokenize, max_len, short_sampling_prob=0.1, pipeline=[]):
         super().__init__()
         self.f_pos = open(file, "r", encoding='utf-8', errors='ignore') # for a positive sample
-        self.f_neg = open(file, "r", encoding='utf-8', errors='ignore') # for a negative (random) sample
+        # self.f_tmpline = open(file, "r", encoding='utf-8', errors='ignore') # for a negative (random) sample
         self.tokenize = tokenize # tokenize function
         self.max_len = max_len # maximum length of tokens
         self.short_sampling_prob = short_sampling_prob
@@ -49,6 +49,28 @@ class SentPairDataLoader():
 
     def read_tokens(self, f, length, discard_last_and_restart=True):
         """ Read tokens from file pointer with limited length """
+        tokens = []
+        while len(tokens) < length:
+            line = f.readline()
+            if not line: # end of file
+                return None
+            if not line.strip(): # blank line (delimiter of documents)
+                if discard_last_and_restart:
+                    tokens = [] # throw all and restart
+                    continue
+                else:
+                    return tokens # return last tokens in the document
+            tokens.extend(self.tokenize(line.strip()))
+        return tokens
+
+
+    def read_tokens_at_pos(self, f, length, pos, discard_last_and_restart=True):
+        """ Read tokens from file pointer with limited length """
+
+        # skipping lines
+        for x in range(pos-1):
+            _skipping = f.readline()
+
         tokens = []
         while len(tokens) < length:
             line = f.readline()
@@ -75,21 +97,38 @@ class SentPairDataLoader():
                     if rand() < self.short_sampling_prob \
                     else int(self.max_len / 2)
 
-                is_next = rand() < 0.5 # whether token_b is next to token_a or not
-
                 tokens_a = self.read_tokens(self.f_pos, len_tokens, True)
-                seek_random_offset(self.f_neg)
-                #f_next = self.f_pos if is_next else self.f_neg
-                f_next = self.f_pos # `f_next` should be next point
-                tokens_b = self.read_tokens(f_next, len_tokens, False)
+                # seek_random_offset(self.f_neg)
+                # f_next = self.f_pos if is_next else self.f_neg
+                # f_next = self.f_pos # `f_next` should be next point
+
+
+                """"
+                1. Get which line to read from the current A line (eg 1st from A, 2nd from A, 3rd from A)
+                    0 means 1st
+                    1 means 2nd 
+                    2 means 3rd
+                    
+                2. Get that line from the current A line
+                
+                3. is_next would be the relative position of line B from line A
+                
+                """
+                possible_orders = [1,2,3]
+                line_b_rel_pos = random.choice(possible_orders)
+                # set f_next to f_pos
+                f_next = self.f_pos
+
+
+
+                tokens_b = self.read_tokens_at_pos(f_next, len_tokens,line_b_rel_pos, False)
 
                 if tokens_a is None or tokens_b is None: # end of file
                     self.f_pos.seek(0, 0) # reset file pointer
                     return
 
                 # SOP, sentence-order prediction
-                instance = (is_next, tokens_a, tokens_b) if is_next \
-                    else (is_next, tokens_b, tokens_a)
+                instance = (line_b_rel_pos-1, tokens_a, tokens_b)
 
                 for proc in self.pipeline:
                     instance = proc(instance)
@@ -177,7 +216,7 @@ class BertModel4Pretrain(nn.Module):
         self.linear = nn.Linear(cfg.hidden, cfg.hidden)
         self.activ2 = models.gelu
         self.norm = models.LayerNorm(cfg)
-        self.classifier = nn.Linear(cfg.hidden, 2)
+        self.classifier = nn.Linear(cfg.hidden, 3)   # to support upto 3 lines order
 
         # decoder is shared with embedding layer
         ## project hidden layer to embedding layer
