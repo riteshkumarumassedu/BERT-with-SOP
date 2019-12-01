@@ -1,8 +1,6 @@
-"""
-    Copyright 2019 Tae Hwan Jung
-    ALBERT Implementation with forking
-    Clean Pytorch Code from https://github.com/dhlee347/pytorchic-bert
-"""
+# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+
+""" Tokenization classes (It's exactly the same code as Google BERT code """
 
 from __future__ import absolute_import
 from __future__ import division
@@ -60,7 +58,7 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     index = 0
-    with open(vocab_file, "r", encoding='utf-8') as reader:
+    with open(vocab_file, "r") as reader:
         while True:
             token = convert_to_unicode(reader.readline())
             if not token:
@@ -78,12 +76,6 @@ def convert_tokens_to_ids(vocab, tokens):
         ids.append(vocab[token])
     return ids
 
-def convert_ids_to_tokens(vocab, ids):
-    """Converts a sequence of id into tokens using the vocab."""
-    tokens = []
-    for id in ids:
-        tokens.append(vocab[id])
-    return tokens
 
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a peice of text."""

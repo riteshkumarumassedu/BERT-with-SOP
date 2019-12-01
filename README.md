@@ -1,147 +1,132 @@
-# ALBERT-Pytorch
+[<img width="400"
+src="https://user-images.githubusercontent.com/32828768/49876264-ff2e4180-fdf0-11e8-9512-06ffe3ede9c5.png">](https://jalammar.github.io/illustrated-bert/)
 
-Simply implementation of [ALBERT(A LITE BERT FOR SELF-SUPERVISED LEARNING OF LANGUAGE REPRESENTATIONS)](https://arxiv.org/pdf/1909.11942.pdf) in Pytorch. This implementation is based on clean [dhlee347](https://github.com/dhlee347)/[pytorchic-bert](https://github.com/dhlee347/pytorchic-bert) code.
+# Pytorchic BERT
+This is re-implementation of [Google BERT model](https://github.com/google-research/bert) [[paper](https://arxiv.org/abs/1810.04805)] in Pytorch. I was strongly inspired by [Hugging Face's code](https://github.com/huggingface/pytorch-pretrained-BERT) and I referred a lot to their codes, but I tried to make my codes **more pythonic and pytorchic style**. Actually, the number of lines is less than a half of HF's. 
 
-Please make sure that I haven't checked the performance yet(i.e Fine-Tuning), only see SOP(sentence-order prediction) and MLM(Masked Langauge model with n-gram) loss falling.
+(It is still not so heavily tested - let me know when you find some bugs.)
 
-- You can see [my implementation of differnt between Original BERT and ALBERT](https://github.com/graykode/ALBERT-Pytorch/commit/757fd6d5de5407f47eb44a6c5c96a3ab203f98d4)
+## Requirements
 
-**CAUTION** Fine-Tuning Tasks not yet!
+Python > 3.6, fire, tqdm, tensorboardx,
+tensorflow (for loading checkpoint file)
 
-
-
-## File Overview
+## Overview
 
 This contains 9 python files.
 - [`tokenization.py`](./tokenization.py) : Tokenizers adopted from the original Google BERT's code
+- [`checkpoint.py`](./checkpoint.py) : Functions to load a model from tensorflow's checkpoint file
 - [`models.py`](./models.py) : Model classes for a general transformer
 - [`optim.py`](./optim.py) : A custom optimizer (BertAdam class) adopted from Hugging Face's code
 - [`train.py`](./train.py) : A helper class for training and evaluation
 - [`utils.py`](./utils.py) : Several utility functions
 - [`pretrain.py`](./pretrain.py) : An example code for pre-training transformer
+- [`classify.py`](./classify.py) : An example code for fine-tuning using pre-trained transformer
+
+## Example Usage
+
+### Fine-tuning (MRPC) Classifier with Pre-trained Transformer
+Download pretrained model [BERT-Base, Uncased](https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-12_H-768_A-12.zip) and
+[GLUE Benchmark Datasets]( https://github.com/nyu-mll/GLUE-baselines) 
+before fine-tuning.
+* make sure that "total_steps" in train_mrpc.json is n_epochs*(num_data/batch_size)
+```
+export GLUE_DIR=/path/to/glue
+export BERT_PRETRAIN=/path/to/pretrain
+export SAVE_DIR=/path/to/save
+
+python classify.py \
+    --task mrpc \
+    --mode train \
+    --train_cfg config/train_mrpc.json \
+    --model_cfg config/bert_base.json \
+    --data_file $GLUE_DIR/MRPC/train.tsv \
+    --pretrain_file $BERT_PRETRAIN/bert_model.ckpt \
+    --vocab $BERT_PRETRAIN/vocab.txt \
+    --save_dir $SAVE_DIR \
+    --max_len 128
+```
+Output :
+```
+cuda (8 GPUs)
+Iter (loss=0.308): 100%|██████████████████████████████████████████████| 115/115 [01:19<00:00,  2.07it/s]
+Epoch 1/3 : Average Loss 0.547
+Iter (loss=0.303): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.30it/s]
+Epoch 2/3 : Average Loss 0.248
+Iter (loss=0.044): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.33it/s]
+Epoch 3/3 : Average Loss 0.068
+```
+
+### Evaluation of the trained Classifier
+```
+export GLUE_DIR=/path/to/glue
+export BERT_PRETRAIN=/path/to/pretrain
+export SAVE_DIR=/path/to/save
+
+python classify.py \
+    --task mrpc \
+    --mode eval \
+    --train_cfg config/train_mrpc.json \
+    --model_cfg config/bert_base.json \
+    --data_file $GLUE_DIR/MRPC/dev.tsv \
+    --model_file $SAVE_DIR/model_steps_345.pt \
+    --vocab $BERT_PRETRAIN/vocab.txt \
+    --max_len 128
+```
+Output :
+```
+cuda (8 GPUs)
+Iter(acc=0.792): 100%|████████████████████████████████████████████████| 13/13 [00:27<00:00,  2.01it/s]
+Accuracy: 0.843137264251709
+```
+[Google BERT original repo](https://github.com/google-research/bert) also reported 84.5%.
 
 
+### Pre-training Transformer
+Input file format :
+1. One sentence per line. These should ideally be actual sentences, not entire paragraphs or arbitrary spans of text. (Because we use the sentence boundaries for the "next sentence prediction" task).
+2. Blank lines between documents. Document boundaries are needed so that the "next sentence prediction" task doesn't span between documents.
+```
+Document 1 sentence 1
+Document 1 sentence 2
+...
+Document 1 sentence 45
 
-## PreTraining
+Document 2 sentence 1
+Document 2 sentence 2
+...
+Document 2 sentence 24
+```
+Usage :
+```
+export DATA_FILE=/path/to/corpus
+export BERT_PRETRAIN=/path/to/pretrain
+export SAVE_DIR=/path/to/save
 
-With [WikiText 2](https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-2-v1.zip) Dataset to try Unit-Test on GPU(t2.xlarge). You can also use parallel Multi-GPU or CPU.
-
-```shell
-$ CUDA_LAUNCH_BLOCKING=1 python pretrain.py \
-            --data_file './data/wiki.train.tokens' \
-            --vocab './data/vocab.txt' \
-            --train_cfg './config/pretrain.json' \
-            --model_cfg './config/albert_unittest.json' \
-            --max_pred 75 --mask_prob 0.15 \
-            --mask_alpha 4 --mask_beta 1 --max_gram 3 \
-            --save_dir './saved' \
-            --log_dir './logs'
-			
-cuda (1 GPUs)
-Iter (loss=19.162): : 526it [02:25,  3.58it/s]
-Epoch 1/25 : Average Loss 18.643
-Iter (loss=12.589): : 524it [02:24,  3.63it/s]
-Epoch 2/25 : Average Loss 13.650
-Iter (loss=9.610): : 523it [02:24,  3.62it/s]
-Epoch 3/25 : Average Loss 9.944
-Iter (loss=10.612): : 525it [02:24,  3.60it/s]
-Epoch 4/25 : Average Loss 9.018
-Iter (loss=9.547): : 527it [02:25,  3.66it/s]
+python pretrain.py \
+    --train_cfg config/pretrain.json \
+    --model_cfg config/bert_base.json \
+    --data_file $DATA_FILE \
+    --vocab $BERT_PRETRAIN/vocab.txt \
+    --save_dir $SAVE_DIR \
+    --max_len 512 \
+    --max_pred 20 \
+    --mask_prob 0.15
+```
+Output (with Toronto Book Corpus):
+```
+cuda (8 GPUs)
+Iter (loss=5.837): : 30089it [18:09:54,  2.17s/it]
+Epoch 1/25 : Average Loss 13.928
+Iter (loss=3.276): : 30091it [18:13:48,  2.18s/it]
+Epoch 2/25 : Average Loss 5.549
+Iter (loss=4.163): : 7380it [4:29:38,  2.19s/it]
 ...
 ```
+Training Curve (1 epoch ~ 30k steps ~ 18 hours):
 
-**TensorboardX** : `loss_lm` + `loss_sop`.
-```shell
-# to use TensorboardX
-$ pip install -U protobuf tensorflow
-$ pip install tensorboardX
-$ tensorboard --logdir logs # expose http://server-ip:6006/
-```
-![](img/tensorboardX.png)
+Loss for Masked LM vs Iteration steps
+<img src="https://user-images.githubusercontent.com/32828768/50011629-9a0e5380-ff8a-11e8-87ab-18cd22453561.png">
+Loss for Next Sentence Prediction vs Iteration steps
+<img src="https://user-images.githubusercontent.com/32828768/50011633-9c70ad80-ff8a-11e8-8670-8baaebb6e51a.png">
 
-
-
-## Introduce Keywords in ALBERT with code.
-
-1. [**SOP(sentence-order prediction) loss**](https://github.com/graykode/ALBERT-Pytorch/blob/master/pretrain.py#L78) : In Original BERT, creating  is-not-next(negative) two sentences with randomly picking, however ALBERT use negative examples the same two consecutive segments but with their order swapped.
-
-   ```python
-   is_next = rand() < 0.5 # whether token_b is next to token_a or not
-   
-   tokens_a = self.read_tokens(self.f_pos, len_tokens, True)
-   seek_random_offset(self.f_neg)
-   #f_next = self.f_pos if is_next else self.f_neg
-   f_next = self.f_pos # `f_next` should be next point
-   tokens_b = self.read_tokens(f_next, len_tokens, False)
-   
-   if tokens_a is None or tokens_b is None: # end of file
-   self.f_pos.seek(0, 0) # reset file pointer
-   return
-   
-   # SOP, sentence-order prediction
-   instance = (is_next, tokens_a, tokens_b) if is_next \
-   else (is_next, tokens_b, tokens_a)
-   ```
-
-2. [**Cross-Layer Parameter Sharing**](https://github.com/graykode/ALBERT-Pytorch/blob/master/models.py#L155) : ALBERT use cross-layer parameter sharing in Attention and FFN(FeedForward Network) to reduce number of parameter.
-  
-   ```python
-   class Transformer(nn.Module):
-       """ Transformer with Self-Attentive Blocks"""
-       def __init__(self, cfg):
-           super().__init__()
-           self.embed = Embeddings(cfg)
-           # Original BERT not used parameter-sharing strategies
-           # self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])
-   
-           # To used parameter-sharing strategies
-           self.n_layers = cfg.n_layers
-           self.attn = MultiHeadedSelfAttention(cfg)
-           self.proj = nn.Linear(cfg.hidden, cfg.hidden)
-           self.norm1 = LayerNorm(cfg)
-           self.pwff = PositionWiseFeedForward(cfg)
-           self.norm2 = LayerNorm(cfg)
-           # self.drop = nn.Dropout(cfg.p_drop_hidden)
-   
-       def forward(self, x, seg, mask):
-           h = self.embed(x, seg)
-   
-           for _ in range(self.n_layers):
-               # h = block(h, mask)
-               h = self.attn(h, mask)
-               h = self.norm1(h + self.proj(h))
-               h = self.norm2(h + self.pwff(h))
-   
-           return h
-   ```
-
-3. [**Factorized Embedding Parameterziation**](https://github.com/graykode/ALBERT-Pytorch/blob/master/models.py#L67) : ALBERT seperated Embedding matrix(VxD) to VxE and ExD.
-
-   ```python
-   class Embeddings(nn.Module):
-       "The embedding module from word, position and token_type embeddings."
-    def __init__(self, cfg):
-           super().__init__()
-           # Original BERT Embedding
-           # self.tok_embed = nn.Embedding(cfg.vocab_size, cfg.hidden) # token embedding
-   
-           # factorized embedding
-           self.tok_embed1 = nn.Embedding(cfg.vocab_size, cfg.embedding)
-           self.tok_embed2 = nn.Linear(cfg.embedding, cfg.hidden)
-   
-           self.pos_embed = nn.Embedding(cfg.max_len, cfg.hidden) # position embedding
-           self.seg_embed = nn.Embedding(cfg.n_segments, cfg.hidden) # segment(token type) embedding
-
-4. [**n-gram MLM**](https://github.com/graykode/ALBERT-Pytorch/blob/master/utils.py#L107) : MLM targets using n-gram masking (Joshi et al., 2019). Same as Paper, I use 3-gram. Code Reference from [XLNET implementation](https://github.com/zihangdai/xlnet/blob/master/data_utils.py#L331).
-   <p align="center"><img width="200" src="img/n-gram.png" /></p>
-
-#### Cannot Implemente now
-
-- In Paper, They use a batch size of 4096 LAMB optimizer with learning rate 0.00176 (You et al., 2019), train all model in 125,000 steps.
-
-
-
-## Author
-
-- Tae Hwan Jung(Jeff Jung) @graykode, Kyung Hee Univ CE(Undergraduate).
-- Author Email : [nlkey2022@gmail.com](mailto:nlkey2022@gmail.com)

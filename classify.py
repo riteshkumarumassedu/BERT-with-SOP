@@ -1,3 +1,5 @@
+# Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+# (Strongly inspired by original Google BERT code and Hugging Face's code)
 
 """ Fine-tuning on A Classification Task with pretrained Transformer """
 
@@ -169,7 +171,7 @@ class Classifier(nn.Module):
 
 def main(task='mrpc',
          train_cfg='config/train_mrpc.json',
-         model_cfg='config/albert_base.json',
+         model_cfg='config/bert_base.json',
          data_file='../glue/MRPC/train.tsv',
          model_file=None,
          pretrain_file='../uncased_L-12_H-768_A-12/bert_model.ckpt',
