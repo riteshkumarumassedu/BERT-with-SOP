@@ -67,10 +67,62 @@ class MNLI(CsvDataset):
         for line in itertools.islice(lines, 1, None): # skip header
             yield line[-1], line[8], line[9] # label, text_a, text_b
 
+class STSB(CsvDataset):
+    """ Dataset Class for STSB"""
+    labels = (None) # label names
+    def __init__(self, file, pipeline=[]):
+        super().__init__(file, pipeline)
+
+    def get_instances(self, lines):
+        for line in itertools.islice(lines, 1, None): # skip header
+            yield line[-1], line[7], line[8] # label, text_a, text_b
+
+
+class QQP(CsvDataset):
+    """ Dataset class for QQP"""
+    labels = ("0", "1") # label names
+    def __init__(self, file, pipeline=[]):
+        super().__init__(file, pipeline)
+
+    def get_instances(self, lines):
+        for line in itertools.islice(lines, 1, None): # skip header
+            yield line[5], line[3], line[4] # label, text_a, text_b
+
+
+class QNLI(CsvDataset):
+    """ Dataset class for QQP"""
+    labels = ("entailment", "not_entailment") # label names
+    def __init__(self, file, pipeline=[]):
+        super().__init__(file, pipeline)
+
+    def get_instances(self, lines):
+        for line in itertools.islice(lines, 1, None): # skip header
+            yield line[-1], line[1], line[2] # label, text_a, text_b
+
+class RTE(CsvDataset):
+    """ Dataset class for RTE"""
+    labels = ("entailment", "not_entailment") # label names
+    def __init__(self, file, pipeline=[]):
+        super().__init__(file, pipeline)
+
+    def get_instances(self, lines):
+        for line in itertools.islice(lines, 1, None): # skip header
+            yield line[-1], line[1], line[2] # label, text_a, text_b
+
+class WNLI(CsvDataset):
+    """ Dataset class for WNLI"""
+    labels = ("0", "1") # label names
+    def __init__(self, file, pipeline=[]):
+        super().__init__(file, pipeline)
+
+    def get_instances(self, lines):
+        for line in itertools.islice(lines, 1, None): # skip header
+            yield line[-1], line[1], line[2] # label, text_a, text_b
+
 
 def dataset_class(task):
     """ Mapping from task string to Dataset Class """
-    table = {'mrpc': MRPC, 'mnli': MNLI}
+    table = {'mrpc': MRPC, 'mnli': MNLI, 'wnli':WNLI, 'rte':RTE, 'qnli':QNLI, 'qqp':QQP, 'stsb':STSB}
     return table[task]
 
 
