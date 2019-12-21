@@ -1,7 +1,6 @@
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team,
-# and Dong-Hyun Lee, Kakao Brain.
-
-""" a slightly modified version of Hugging Face's BERTAdam class """
+"""
+Optimizer derived from Hugging Face
+"""
 
 import math
 import torch
@@ -30,19 +29,7 @@ SCHEDULES = {
 }
 
 class BertAdam(Optimizer):
-    """Implements BERT version of Adam algorithm with weight decay fix.
-    Params:
-        lr: learning rate
-        warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
-        t_total: total number of training steps for the learning
-            rate schedule, -1  means constant learning rate. Default: -1
-        schedule: schedule to use for the warmup (see above). Default: 'warmup_linear'
-        b1: Adams b1. Default: 0.9
-        b2: Adams b2. Default: 0.999
-        e: Adams epsilon. Default: 1e-6
-        weight_decay_rate: Weight decay. Default: 0.01
-        max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
-    """
+
     def __init__(self, params, lr, warmup=-1, t_total=-1, schedule='warmup_linear',
                  b1=0.9, b2=0.999, e=1e-6, weight_decay_rate=0.01,
                  max_grad_norm=1.0):
@@ -75,12 +62,6 @@ class BertAdam(Optimizer):
         return lr
 
     def step(self, closure=None):
-        """Performs a single optimization step.
-
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -109,20 +90,9 @@ class BertAdam(Optimizer):
                 # Add grad clipping
                 if group['max_grad_norm'] > 0:
                     clip_grad_norm_(p, group['max_grad_norm'])
-
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
                 next_m.mul_(beta1).add_(1 - beta1, grad)
                 next_v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
                 update = next_m / (next_v.sqrt() + group['e'])
-
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
                 if group['weight_decay_rate'] > 0.0:
                     update += group['weight_decay_rate'] * p.data
 
@@ -136,24 +106,15 @@ class BertAdam(Optimizer):
                 p.data.add_(-update_with_lr)
 
                 state['step'] += 1
-
-                # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
-                # No bias correction
-                # bias_correction1 = 1 - beta1 ** state['step']
-                # bias_correction2 = 1 - beta2 ** state['step']
-
         return loss
 
 
 
-def optim4GPU(cfg, model):
+def optim_for_GPU(cfg, model):
     """ optimizer for GPU training """
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'gamma', 'beta']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
         {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}]
-    return BertAdam(optimizer_grouped_parameters,
-                    lr=cfg.lr,
-                    warmup=cfg.warmup,
-                    t_total=cfg.total_steps)
+    return BertAdam(optimizer_grouped_parameters, lr=cfg.lr, warmup=cfg.warmup, t_total=cfg.total_steps)

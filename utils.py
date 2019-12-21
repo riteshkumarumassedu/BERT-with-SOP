@@ -1,4 +1,4 @@
-# Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+
 
 """ Utils Functions """
 
@@ -9,23 +9,30 @@ import logging
 import numpy as np
 import torch
 
-
-def set_seeds(seed):
-    "set random seeds"
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-def get_device():
-    "get device (CPU or GPU)"
+def get_gpu_or_cpu():
+    """
+    get device (CPU or GPU)
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_gpu = torch.cuda.device_count()
     print("%s (%d GPUs)" % (device, n_gpu))
     return device
 
+
+def set_random_seed(seed):
+    """
+    set random seeds
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 def split_last(x, shape):
-    "split the last dimension to given shape"
+    """
+    split the last dimension to given shape
+    """
     shape = list(shape)
     assert shape.count(-1) <= 1
     if -1 in shape:
@@ -33,18 +40,14 @@ def split_last(x, shape):
     return x.view(*x.size()[:-1], *shape)
 
 def merge_last(x, n_dims):
-    "merge the last n_dims to a dimension"
+    """
+    merge the last n_dims to a dimension
+    """
     s = x.size()
     assert n_dims > 1 and n_dims < len(s)
     return x.view(*s[:-n_dims], -1)
 
 def find_sublist(haystack, needle):
-    """Return the index at which the sequence needle appears in the
-    sequence haystack, or -1 if it is not found, using the Boyer-
-    Moore-Horspool algorithm. The elements of needle and haystack must
-    be hashable.
-    https://codereview.stackexchange.com/questions/19627/finding-sub-list
-    """
     h = len(haystack)
     n = len(needle)
     skip = {needle[i]: n - i - 1 for i in range(n - 1)}
@@ -71,8 +74,10 @@ def get_random_word(vocab_words):
     i = random.randint(0, len(vocab_words)-1)
     return vocab_words[i]
 
-def get_logger(name, log_path):
-    "get logger"
+def tensorboard_logger(name, log_path):
+    """
+        logger for tensorboard
+    """
     logger = logging.getLogger(name)
     fomatter = logging.Formatter(
         '[ %(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
@@ -83,11 +88,8 @@ def get_logger(name, log_path):
     fileHandler = logging.FileHandler(log_path)
     fileHandler.setFormatter(fomatter)
     logger.addHandler(fileHandler)
-
-    #streamHandler = logging.StreamHandler()
-    #streamHandler.setFormatter(fomatter)
-    #logger.addHandler(streamHandler)
-
     logger.setLevel(logging.DEBUG)
     return logger
+
+
 

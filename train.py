@@ -1,4 +1,4 @@
-# Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+
 
 """ Training Config & Helper Classes  """
 
@@ -104,7 +104,7 @@ class Trainer(object):
         elif pretrain_file: # use pretrained transformer
             print('Loading the pretrained model from', pretrain_file)
             if pretrain_file.endswith('.ckpt'): # checkpoint file in tensorflow
-                checkpoint.load_model(self.model.transformer, pretrain_file)
+                checkpoint.load_model_from_checkpoint(self.model.transformer, pretrain_file)
             elif pretrain_file.endswith('.pt'): # pretrain model file in pytorch
                 self.model.transformer.load_state_dict(
                     {key[12:]: value

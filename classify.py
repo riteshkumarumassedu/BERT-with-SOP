@@ -1,211 +1,25 @@
-# Copyright 2018 Dong-Hyun Lee, Kakao Brain.
-# (Strongly inspired by original Google BERT code and Hugging Face's code)
-
-""" Fine-tuning on A Classification Task with pretrained Transformer """
-
-import itertools
-import csv
+"""
+Module to support the downstream classification tasks
+"""
 import fire
-
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-
 import tokenization
 import models
 import optim
 import train
-
-from utils import set_seeds, get_device, truncate_tokens_pair
-
-class CsvDataset(Dataset):
-    """ Dataset Class for CSV file """
-    labels = None
-    def __init__(self, file, pipeline=[]): # cvs file and pipeline object
-        Dataset.__init__(self)
-        data = []
-        with open(file, "r") as f:
-            # list of splitted lines : line is also list
-            lines = csv.reader(f, delimiter='\t', quotechar=None)
-            for instance in self.get_instances(lines): # instance : tuple of fields
-                for proc in pipeline: # a bunch of pre-processing
-                    instance = proc(instance)
-                data.append(instance)
-
-        # To Tensors
-        self.tensors = [torch.tensor(x, dtype=torch.long) for x in zip(*data)]
-
-    def __len__(self):
-        return self.tensors[0].size(0)
-
-    def __getitem__(self, index):
-        return tuple(tensor[index] for tensor in self.tensors)
-
-    def get_instances(self, lines):
-        """ get instance array from (csv-separated) line list """
-        raise NotImplementedError
-
-
-class MRPC(CsvDataset):
-    """ Dataset class for MRPC """
-    labels = ("0", "1") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[0], line[3], line[4] # label, text_a, text_b
-
-
-class MNLI(CsvDataset):
-    """ Dataset class for MNLI """
-    labels = ("contradiction", "entailment", "neutral") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[-1], line[8], line[9] # label, text_a, text_b
-
-class STSB(CsvDataset):
-    """ Dataset Class for STSB"""
-    labels = (None) # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[-1], line[7], line[8] # label, text_a, text_b
-
-
-class QQP(CsvDataset):
-    """ Dataset class for QQP"""
-    labels = ("0", "1") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[5], line[3], line[4] # label, text_a, text_b
-
-
-class QNLI(CsvDataset):
-    """ Dataset class for QQP"""
-    labels = ("entailment", "not_entailment") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[-1], line[1], line[2] # label, text_a, text_b
-
-class RTE(CsvDataset):
-    """ Dataset class for RTE"""
-    labels = ("entailment", "not_entailment") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[-1], line[1], line[2] # label, text_a, text_b
-
-class WNLI(CsvDataset):
-    """ Dataset class for WNLI"""
-    labels = ("0", "1") # label names
-    def __init__(self, file, pipeline=[]):
-        super().__init__(file, pipeline)
-
-    def get_instances(self, lines):
-        for line in itertools.islice(lines, 1, None): # skip header
-            yield line[-1], line[1], line[2] # label, text_a, text_b
-
-
-def dataset_class(task):
-    """ Mapping from task string to Dataset Class """
-    table = {'mrpc': MRPC, 'mnli': MNLI, 'wnli':WNLI, 'rte':RTE, 'qnli':QNLI, 'qqp':QQP, 'stsb':STSB}
-    return table[task]
-
-
-class Pipeline():
-    """ Preprocess Pipeline Class : callable """
-    def __init__(self):
-        super().__init__()
-
-    def __call__(self, instance):
-        raise NotImplementedError
-
-
-class Tokenizing(Pipeline):
-    """ Tokenizing sentence pair """
-    def __init__(self, preprocessor, tokenize):
-        super().__init__()
-        self.preprocessor = preprocessor # e.g. text normalization
-        self.tokenize = tokenize # tokenize function
-
-    def __call__(self, instance):
-        label, text_a, text_b = instance
-
-        label = self.preprocessor(label)
-        tokens_a = self.tokenize(self.preprocessor(text_a))
-        tokens_b = self.tokenize(self.preprocessor(text_b)) \
-                   if text_b else []
-
-        return (label, tokens_a, tokens_b)
-
-
-class AddSpecialTokensWithTruncation(Pipeline):
-    """ Add special tokens [CLS], [SEP] with truncation """
-    def __init__(self, max_len=512):
-        super().__init__()
-        self.max_len = max_len
-
-    def __call__(self, instance):
-        label, tokens_a, tokens_b = instance
-
-        # -3 special tokens for [CLS] text_a [SEP] text_b [SEP]
-        # -2 special tokens for [CLS] text_a [SEP]
-        _max_len = self.max_len - 3 if tokens_b else self.max_len - 2
-        truncate_tokens_pair(tokens_a, tokens_b, _max_len)
-
-        # Add Special Tokens
-        tokens_a = ['[CLS]'] + tokens_a + ['[SEP]']
-        tokens_b = tokens_b + ['[SEP]'] if tokens_b else []
-
-        return (label, tokens_a, tokens_b)
-
-
-class TokenIndexing(Pipeline):
-    """ Convert tokens into token indexes and do zero-padding """
-    def __init__(self, indexer, labels, max_len=512):
-        super().__init__()
-        self.indexer = indexer # function : tokens to indexes
-        # map from a label name to a label index
-        self.label_map = {name: i for i, name in enumerate(labels)}
-        self.max_len = max_len
-
-    def __call__(self, instance):
-        label, tokens_a, tokens_b = instance
-
-        input_ids = self.indexer(tokens_a + tokens_b)
-        segment_ids = [0]*len(tokens_a) + [1]*len(tokens_b) # token type ids
-        input_mask = [1]*(len(tokens_a) + len(tokens_b))
-
-        label_id = self.label_map[label]
-
-        # zero padding
-        n_pad = self.max_len - len(input_ids)
-        input_ids.extend([0]*n_pad)
-        segment_ids.extend([0]*n_pad)
-        input_mask.extend([0]*n_pad)
-
-        return (input_ids, segment_ids, input_mask, label_id)
-
+from data_reader_helper import *
+from data_tokenizer import *
+from utils import set_random_seed, get_gpu_or_cpu
 
 class Classifier(nn.Module):
-    """ Classifier with Transformer """
+    """
+    Classifier with Transformer
+    """
     def __init__(self, cfg, n_labels):
         super().__init__()
-        self.transformer = models.Transformer(cfg)
+        self.transformer = models.transformer_block(cfg)
         self.fc = nn.Linear(cfg.dim, cfg.dim)
         self.activ = nn.Tanh()
         self.drop = nn.Dropout(cfg.p_drop_hidden)
@@ -213,51 +27,48 @@ class Classifier(nn.Module):
 
     def forward(self, input_ids, segment_ids, input_mask):
         h = self.transformer(input_ids, segment_ids, input_mask)
-        # only use the first h in the sequence
         pooled_h = self.activ(self.fc(h[:, 0]))
         logits = self.classifier(self.drop(pooled_h))
         return logits
 
-#pretrain_file='../uncased_L-12_H-768_A-12/bert_model.ckpt',
-#pretrain_file='../exp/bert/pretrain_100k/model_epoch_3_steps_9732.pt',
-
-def main(task='mrpc',
-         train_cfg='config/train_mrpc.json',
-         model_cfg='config/bert_base.json',
-         data_file='../glue/MRPC/train.tsv',
-         model_file=None,
-         pretrain_file='../uncased_L-12_H-768_A-12/bert_model.ckpt',
-         data_parallel=True,
-         vocab='../uncased_L-12_H-768_A-12/vocab.txt',
-         save_dir='../exp/bert/mrpc',
-         max_len=128,
-         mode='train'):
+def main(task='mrpc', train_cfg='config/train_mrpc.json', model_cfg='config/bert_base.json',
+         data_file='../glue/MRPC/train.tsv', model_file=None, pretrain_file='../uncased_L-12_H-768_A-12/bert_model.ckpt',
+         data_parallel=True, vocab='../uncased_L-12_H-768_A-12/vocab.txt',
+         save_dir='../exp/bert/mrpc', max_len=128, mode='train'):
+    """
+    :param task:            dataset for which you want to run
+    :param train_cfg:       json file containing params for the classification run
+    :param model_cfg:       json file containing the details about BERT baase model
+    :param data_file:       csv file realted the the data set
+    :param model_file:
+    :param pretrain_file:   pretrained model weights checkpoint
+    :param data_parallel:   if we want to run data parallel
+    :param vocab:           vocab file "uses the vocab file which came along with the bet uncased weights"
+    :param save_dir:        path to save the checkpoints
+    :param max_len:         maximum sequence length
+    :param mode:            train, validation or test
+    :return:
+    """
 
     cfg = train.Config.from_json(train_cfg)
     model_cfg = models.Config.from_json(model_cfg)
-
-    set_seeds(cfg.seed)
-
+    set_random_seed(cfg.seed)
     tokenizer = tokenization.FullTokenizer(vocab_file=vocab, do_lower_case=True)
-    TaskDataset = dataset_class(task) # task dataset class according to the task
-    pipeline = [Tokenizing(tokenizer.convert_to_unicode, tokenizer.tokenize),
-                AddSpecialTokensWithTruncation(max_len),
-                TokenIndexing(tokenizer.convert_tokens_to_ids,
-                              TaskDataset.labels, max_len)]
+    TaskDataset = dataset_to_class_mapping(task)
+    pipeline = [Tokenize_data(tokenizer.convert_to_unicode, tokenizer.tokenize),
+                Tokenizer_helper(max_len),
+                Indexing_the_tokens(tokenizer.convert_tokens_to_ids,
+                                    TaskDataset.labels, max_len)]
     dataset = TaskDataset(data_file, pipeline)
     data_iter = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
 
     model = Classifier(model_cfg, len(TaskDataset.labels))
     criterion = nn.CrossEntropyLoss()
 
-    trainer = train.Trainer(cfg,
-                            model,
-                            data_iter,
-                            optim.optim4GPU(cfg, model),
-                            save_dir, get_device())
+    trainer = train.Trainer(cfg, model, data_iter, optim.optim_for_GPU(cfg, model), save_dir, get_gpu_or_cpu())
 
     if mode == 'train':
-        def get_loss(model, batch, global_step): # make sure loss is a scalar tensor
+        def get_loss(model, batch, global_step):
             input_ids, segment_ids, input_mask, label_id = batch
             logits = model(input_ids, segment_ids, input_mask)
             loss = criterion(logits, label_id)
@@ -270,7 +81,7 @@ def main(task='mrpc',
             input_ids, segment_ids, input_mask, label_id = batch
             logits = model(input_ids, segment_ids, input_mask)
             _, label_pred = logits.max(1)
-            result = (label_pred == label_id).float() #.cpu().numpy()
+            result = (label_pred == label_id).float()
             accuracy = result.mean()
             return accuracy, result
 
