@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export DATA_FILE=/mnt/nfs/scratch1/riteshkumar/nlp_2019/wikitext-103/wiki.train.tokens
-export BERT_PRETRAIN=/mnt/nfs/scratch1/riteshkumar/nlp_code/bert_with_sop/uncased_L-12_H-768_A-12
-export SAVE_DIR=/mnt/nfs/scratch1/riteshkumar/nlp_code/bert_sop2/without_clsf
+export DATA_FILE=wikitext-103/wiki.train.tokens
+export BERT_PRETRAIN=uncased_L-12_H-768_A-12
+export SAVE_DIR=dir to save results
 
 python pretrain.py \
     --train_cfg config/pretrain.json \
