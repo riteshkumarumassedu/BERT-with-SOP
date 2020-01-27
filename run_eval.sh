@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export GLUE_DIR=/mnt/nfs/scratch1/riteshkumar/nlp_2019/glue_data
-export BERT_PRETRAIN=/mnt/nfs/scratch1/riteshkumar/nlp_code/bert_with_sop/uncased_L-12_H-768_A-12
-export SAVE_DIR=/mnt/nfs/scratch1/riteshkumar/nlp_code/bert_with_sop
+export GLUE_DIR=glue_data
+export BERT_PRETRAIN=uncased_L-12_H-768_A-12
+export SAVE_DIR=dir to save results
 
 python classify.py \
     --task mrpc \
